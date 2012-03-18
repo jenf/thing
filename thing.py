@@ -38,6 +38,61 @@ class Histogram(object):
         for i in xrange(1, len(self.array)):
             print "%2d: %.2f" % (i, self.array[i] / ftot)
 
+class Player(object):
+    def __init__(self, is_human):
+        self.is_human = is_human
+        self.is_knowing_thing = False
+
+    def is_human(self):
+        return self.is_human
+
+    def is_thing(self):
+        return not self.is_human
+
+    def become_thing(self):
+        self.is_human = False
+        self.is_knowing_thing = True
+
+
+    def new_turn(self):
+        self.is_knowing_thing = False
+
+    def __repr__(self):
+        return str(self.is_human)
+
+class GameState(object):
+    def __init__(self, players, start_things):
+        self.no_players = players
+        self.players = []
+        for x in range(0,players):
+            self.players.append(Player(True))
+
+        for x in range(0,start_things):
+            self.players[x].become_thing()
+
+    def number_things(self):
+        print repr(self.players)
+        things = 0
+        for x in self.players:
+            if x.is_thing():
+                things+=1
+        return things
+
+    def test_for_thing(self, index):
+        if self.players[index].is_thing():
+            self.players.pop(index)
+            return True
+        return False
+
+    def night_phase(self):
+        things = self.number_things()
+        for x in self.players:
+            x.new_turn()
+        # Choose new thing from current humans
+        new_thing = random.randrange(things, len(self.players))
+        self.players[new_thing].become_thing()
+
+
 def popcount(v):
     c = 0
     while v:
@@ -53,6 +108,9 @@ def debug(msg, args=()):
 # nh is number of humans
 # Return True if the things won
 def play_game(config):
+
+    state = GameState(config.players, 2)
+
     def random_votes(n):
         res = 0
         while n > 0:
@@ -89,6 +147,7 @@ def play_game(config):
             debug("Tie")
             return (True, rounds, ntot)
         if new_round:
+            state.night_phase()
             rounds += 1
             new_round = False
             if tested > 0:
@@ -172,7 +231,7 @@ def montecarlo(config, niter):
     return (human / float(human + thing), hlen, tlen)
 
 config = GameConfig(10, True, 0.7, [2, 2, 2, 1, 1])
-(percent, hlen, tlen) = montecarlo(config, 5000)
+(percent, hlen, tlen) = montecarlo(config, 1) #5000)
 print "Humans win %.2f" % percent
 hlen.output()
 print
