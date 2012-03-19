@@ -8,8 +8,8 @@ import random
 
 start_night = True
 
-#do_debug = False
-do_debug = True
+do_debug = False
+#do_debug = True
 
 class GameConfig(object):
     # tie_break is True if ties result in a test
@@ -21,7 +21,7 @@ class GameConfig(object):
         self.retries = retries
     def retry_count(self, n):
         if n >= len(self.retries):
-            return 0
+            return 1
         return self.retries[n]
 
 class Histogram(object):
@@ -40,25 +40,24 @@ class Histogram(object):
 
 class Player(object):
     def __init__(self, is_human):
-        self.is_human = is_human
+        self.type = is_human
         self.is_knowing_thing = False
 
     def is_human(self):
-        return self.is_human
+        return self.type
 
     def is_thing(self):
-        return not self.is_human
+        return not self.type
 
     def become_thing(self):
-        self.is_human = False
+        self.type = False
         self.is_knowing_thing = True
-
 
     def new_turn(self):
         self.is_knowing_thing = False
 
     def __repr__(self):
-        return str(self.is_human)
+        return str(self.type)
 
 class GameState(object):
     def __init__(self, players, start_things):
@@ -71,7 +70,7 @@ class GameState(object):
             self.players[x].become_thing()
 
     def number_things(self):
-        print repr(self.players)
+        debug(repr(self.players))
         things = 0
         for x in self.players:
             if x.is_thing():
@@ -80,8 +79,10 @@ class GameState(object):
 
     def test_for_thing(self, index):
         if self.players[index].is_thing():
+            debug("Thing found")
             self.players.pop(index)
             return True
+        debug("Human found")
         return False
 
     def night_phase(self):
@@ -89,8 +90,29 @@ class GameState(object):
         for x in self.players:
             x.new_turn()
         # Choose new thing from current humans
-        new_thing = random.randrange(things, len(self.players))
-        self.players[new_thing].become_thing()
+        new_thing = random.randrange(len(self.players)-things)
+        idx = 0
+        while new_thing > 0:
+            if self.players[idx].is_human():
+                new_thing-=1
+            else:
+                idx +=1
+        self.players[idx].become_thing()
+
+    def nominate(self,playerno):
+        # Assume that the nomination succeds
+        debug("Testing player "+str(playerno))
+        return self.test_for_thing(playerno)
+
+    def win_condition(self):
+        things = self.number_things()
+        if (things == 0):
+            debug("Humans win")
+            return (True, False)
+        if (things * 2 > len(self.players)):
+            debug("Things win")
+            return (True, True)
+        return (False, False)
 
 
 def popcount(v):
@@ -110,6 +132,29 @@ def debug(msg, args=()):
 def play_game(config):
 
     state = GameState(config.players, 2)
+    rounds = 0
+    votes = 0
+    while True:
+       if votes == 0:
+           (win, whowon) = state.win_condition()
+           if (win):
+                print ("Won "+str(whowon)+" "+str(rounds))
+                return (whowon, rounds, state.number_things())
+# Night phase
+           state.night_phase()
+           rounds+=1
+           debug( "Round %i" % rounds)
+           votes = config.retry_count(rounds)
+           debug("At retry "+str(votes))
+       if (state.nominate(random.randrange(len(state.players)))==False):
+#           print "Votes %i" % votes
+           votes = votes-1
+        
+
+
+    return
+
+
 
     def random_votes(n):
         res = 0
@@ -147,7 +192,6 @@ def play_game(config):
             debug("Tie")
             return (True, rounds, ntot)
         if new_round:
-            state.night_phase()
             rounds += 1
             new_round = False
             if tested > 0:
@@ -230,8 +274,12 @@ def montecarlo(config, niter):
             hlen.add(rounds)
     return (human / float(human + thing), hlen, tlen)
 
-config = GameConfig(10, True, 0.7, [2, 2, 2, 1, 1])
-(percent, hlen, tlen) = montecarlo(config, 1) #5000)
+config = GameConfig(10, True, 0.7, [2, 2, 2, 2, 2])
+if do_debug==False:
+ (percent, hlen, tlen) = montecarlo(config, 5000)
+else:
+ (percent, hlen, tlen) = montecarlo(config, 1)
+
 print "Humans win %.2f" % percent
 hlen.output()
 print
