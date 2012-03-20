@@ -12,10 +12,14 @@ do_debug = False
 #do_debug = True
 
 class GameConfig(object):
+    # players is total number of players (including things)
+    # start_things is number of things at start of game
     # tie_break is True if ties result in a test
     # bloodlust is probability of humans voting for a test
-    def __init__(self, players, tie_break, bloodlust, retries):
+    # retries is array of number of retries for each round (or 1 if not included)
+    def __init__(self, players, start_things, tie_break, bloodlust, retries):
         self.players = players
+        self.start_things = start_things
         self.tie_break = 1 if tie_break else 0
         self.bloodlust = bloodlust
         self.retries = retries
@@ -23,6 +27,9 @@ class GameConfig(object):
         if n >= len(self.retries):
             return 1
         return self.retries[n]
+
+    def __str__(self):
+        return "Players: %i Tie_break: %i Start Things: %i Bloodlust: %f Retries: %s" % (self.players, self.tie_break, self.start_things, self.bloodlust, str(self.retries))
 
 class Histogram(object):
     def __init__(self):
@@ -39,9 +46,10 @@ class Histogram(object):
             print "%2d: %.2f" % (i, self.array[i] / ftot)
 
 class Player(object):
-    def __init__(self, is_human):
+    def __init__(self, is_human, config):
         self.type = is_human
         self.is_knowing_thing = False
+        self.config = config
 
     def is_human(self):
         return self.type
@@ -56,17 +64,21 @@ class Player(object):
     def new_turn(self):
         self.is_knowing_thing = False
 
+    def vote(self, player):
+# Always vote
+        return True
+
     def __repr__(self):
         return str(self.type)
 
 class GameState(object):
-    def __init__(self, players, start_things):
-        self.no_players = players
+    def __init__(self, config):
+        self.no_players = config.players
         self.players = []
-        for x in range(0,players):
-            self.players.append(Player(True))
+        for x in range(0,config.players):
+            self.players.append(Player(True,config))
 
-        for x in range(0,start_things):
+        for x in range(0,config.start_things):
             self.players[x].become_thing()
 
     def number_things(self):
@@ -100,9 +112,25 @@ class GameState(object):
         self.players[idx].become_thing()
 
     def nominate(self,playerno):
-        # Assume that the nomination succeds
+        # Assume that the first and seconding succeds
         debug("Testing player "+str(playerno))
-        return self.test_for_thing(playerno)
+        testing_player = self.players[playerno]
+        votes = len(self.players)-1
+        votes_yes = 0
+        for x in self.players:
+            # TODO: Can people vote for themselves?
+            if x!=testing_player:
+              vote = x.vote(testing_player)
+              if vote:
+                votes_yes=votes_yes+1
+        debug("Vote result %i/%i %f" % (votes_yes, votes, votes_yes/votes))
+        if ((votes_yes+config.tie_break) > (votes)/2):
+          return self.test_for_thing(playerno)
+        # Test did not take place.
+        return True
+
+    def run_vote(self):
+        return self.nominate(random.randrange(len(self.players)))
 
     def win_condition(self):
         things = self.number_things()
@@ -131,14 +159,14 @@ def debug(msg, args=()):
 # Return True if the things won
 def play_game(config):
 
-    state = GameState(config.players, 2)
+    state = GameState(config)
     rounds = 0
     votes = 0
     while True:
        if votes == 0:
            (win, whowon) = state.win_condition()
            if (win):
-                print ("Won "+str(whowon)+" "+str(rounds))
+                debug("Won "+str(whowon)+" "+str(rounds))
                 return (whowon, rounds, state.number_things())
 # Night phase
            state.night_phase()
@@ -146,9 +174,16 @@ def play_game(config):
            debug( "Round %i" % rounds)
            votes = config.retry_count(rounds)
            debug("At retry "+str(votes))
-       if (state.nominate(random.randrange(len(state.players)))==False):
+       if (state.run_vote()==False):
 #           print "Votes %i" % votes
            votes = votes-1
+       else:
+# Check win conditions
+           (win, whowon) = state.win_condition()
+           if (win):
+              debug("Won "+str(whowon)+" "+str(rounds))
+              return (whowon, rounds, state.number_things())
+
         
 
 
@@ -274,13 +309,14 @@ def montecarlo(config, niter):
             hlen.add(rounds)
     return (human / float(human + thing), hlen, tlen)
 
-config = GameConfig(10, True, 0.7, [2, 2, 2, 2, 2])
+config = GameConfig(10, 2, True, 0.7, [2]*3)
 if do_debug==False:
  (percent, hlen, tlen) = montecarlo(config, 5000)
 else:
  (percent, hlen, tlen) = montecarlo(config, 1)
 
-print "Humans win %.2f" % percent
+print config
+print "Humans win %.2f%%" % (percent * 100)
 hlen.output()
-print
+print "Things"
 tlen.output()
