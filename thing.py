@@ -1,15 +1,22 @@
 #! /usr/bin/env python
 
 # Monte Carlo simulator for The Thing.
-# Copyright (C) 2012 Paul Brook 
+# Copyright (C) 2012 Paul Brook, Jen Freeman
 # Released under the GNU GPL v3.
 
-import random
+import random,sys
 
 start_night = True
 
-do_debug = False
-#do_debug = True
+if len(sys.argv) <2:
+   print "thing.py <runs>"
+   sys.exit(1)
+
+runs = int(sys.argv[1])
+if runs == 1:
+   do_debug = True
+else:
+   do_debug = False
 
 class GameConfig(object):
     # players is total number of players (including things)
@@ -54,6 +61,8 @@ class Player(object):
         self.type = is_human
         self.is_knowing_thing = False
         self.config = config
+        self.probability = config.start_things / float(config.players)
+        self._is_tested = False
 
     def is_human(self):
         return self.type
@@ -61,13 +70,22 @@ class Player(object):
     def is_thing(self):
         return not self.type
 
+    def is_tested(self):
+        return self._is_tested
+
     def become_thing(self):
         self.type = False
         self.is_knowing_thing = True
 
     def new_turn(self):
+        self._is_tested = False
         self.is_knowing_thing = False
 
+    def test(self):
+        self.probability = 0
+        self._is_tested = True
+        return self.is_thing()
+        
     def vote(self, player):
         prob = 1
         if self.is_human():
@@ -133,6 +151,10 @@ class GameState(object):
         # Assume that the first and seconding succeds
         debug("Testing player "+str(playerno))
         testing_player = self.players[playerno]
+        # no point retesting
+        if testing_player.is_tested():
+                return True
+
         votes = len(self.players)-1
         votes_yes = 0
         for x in self.players:
@@ -217,10 +239,7 @@ def montecarlo(config, niter):
     return (human / float(human + thing), hlen, tlen)
 
 config = GameConfig(10, 2, True, 0.7, 1, 0, [2]*5)
-if do_debug==False:
- (percent, hlen, tlen) = montecarlo(config, 500)#00)
-else:
- (percent, hlen, tlen) = montecarlo(config, 1)
+(percent, hlen, tlen) = montecarlo(config, runs)
 
 print config
 print "Humans win %.2f%%" % (percent * 100)
