@@ -77,9 +77,10 @@ class Player(object):
         self.type = False
         self.is_knowing_thing = True
 
-    def new_turn(self):
+    def new_turn(self, players):
         self._is_tested = False
         self.is_knowing_thing = False
+        self.probability += (1.0/players)
 
     def test(self):
         self.probability = 0
@@ -105,7 +106,7 @@ class Player(object):
 #        return True
 
     def __repr__(self):
-        return str(self.type)
+        return "%s %f" % (str(self.type),self.probability)
 
 class GameState(object):
     def __init__(self, config):
@@ -126,7 +127,7 @@ class GameState(object):
         return things
 
     def test_for_thing(self, index):
-        if self.players[index].is_thing():
+        if self.players[index].test():
             debug("Thing found")
             self.players.pop(index)
             return True
@@ -136,16 +137,14 @@ class GameState(object):
     def night_phase(self):
         things = self.number_things()
         for x in self.players:
-            x.new_turn()
+            x.new_turn(len(self.players))
         # Choose new thing from current humans
-        new_thing = random.randrange(len(self.players)-things)
-        idx = 0
-        while new_thing > 0:
-            if self.players[idx].is_human():
-                new_thing-=1
-            else:
-                idx +=1
-        self.players[idx].become_thing()
+        humans = []
+        for x in self.players:
+            if x.is_human():
+                humans.append(x)
+        debug("Night phase "+repr(humans))
+        random.choice(humans).become_thing()
 
     def nominate(self,playerno):
         # Assume that the first and seconding succeds
@@ -238,7 +237,7 @@ def montecarlo(config, niter):
             hlen.add(rounds)
     return (human / float(human + thing), hlen, tlen)
 
-config = GameConfig(10, 2, True, 0.7, 1, 0, [2]*5)
+config = GameConfig(10, 2, True, 1, 1, 1, [2]*5)
 (percent, hlen, tlen) = montecarlo(config, runs)
 
 print config
