@@ -26,7 +26,9 @@ class GameConfig(object):
     # bloodlust_thing is probability of things voting for a test for a human - 1 for always
     # cannibalism is probability of things voting for a thing to be tested - 1 for always
     # retries is array of number of retries for each round (or 1 if not included)
-    def __init__(self, players, start_things, tie_break, bloodlust_human, bloodlust_thing, cannibalism, retries):
+    # prob_weight_nominate is the weight taking the probabilities into account when nominating (+1 for always -1 for never)
+    # prob_weight_things is the weight things take the probabilites into account when thinging (+1 is always choose the highest probability, -1 for never choose the highest probability)
+    def __init__(self, players, start_things, tie_break, bloodlust_human, bloodlust_thing, cannibalism, retries, prob_weight_nominate, prob_weight_things):
         self.players = players
         self.start_things = start_things
         self.tie_break = 1 if tie_break else 0
@@ -34,6 +36,8 @@ class GameConfig(object):
         self.bloodlust_thing = bloodlust_thing
         self.cannibalism = cannibalism
         self.retries = retries
+        self.prob_weight_nominate = prob_weight_nominate
+        self.prob_weight_things = prob_weight_things
     def retry_count(self, n):
         if n >= len(self.retries):
             return 1
@@ -112,6 +116,7 @@ class GameState(object):
     def __init__(self, config):
         self.no_players = config.players
         self.players = []
+        self.config = config
         for x in range(0,config.players):
             self.players.append(Player(True,config))
 
@@ -127,6 +132,7 @@ class GameState(object):
         return things
 
     def test_for_thing(self, index):
+        debug("Testing %i from %s" %(index,repr(self.players)))
         if self.players[index].test():
             debug("Thing found")
             self.players.pop(index)
@@ -169,7 +175,17 @@ class GameState(object):
         return True
 
     def run_vote(self):
-        return self.nominate(random.randrange(len(self.players)))
+        if (self.config.prob_weight_nominate != None):
+        # Nominate the most likely person
+            people = []
+            for x in self.players:
+                if not x.is_tested():
+                     people.append(x)
+            people=sorted(people, key=lambda person: person.probability)
+            return self.nominate(self.players.index(people[-1]))
+        else:
+        # Random choice
+            return self.nominate(random.randrange(len(self.players)))
 
     def win_condition(self):
         things = self.number_things()
@@ -237,7 +253,7 @@ def montecarlo(config, niter):
             hlen.add(rounds)
     return (human / float(human + thing), hlen, tlen)
 
-config = GameConfig(10, 2, True, 1, 1, 1, [2]*5)
+config = GameConfig(10, 2, True, 1, 1, 1, [2]*3, None, None)
 (percent, hlen, tlen) = montecarlo(config, runs)
 
 print config
